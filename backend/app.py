@@ -32,6 +32,7 @@ from sources_catalog import SOURCES_BY_COUNTRY, get_catalog, get_all_source_urls
 from pulse import get_ai_industry_analysis
 from ai_newspaper import generate_newspaper_edition
 from typing import AsyncGenerator, Optional
+from bias_evaluator import BiasEvaluator
 
 logger = logging.getLogger("factnews")
 
@@ -160,6 +161,12 @@ class ConsensusResponse(BaseModel):
     sources_analyzed: int | None = None
     cached: bool = False
     council_meta: dict | None = None
+
+class BiasTestRequest(BaseModel):
+    model_name: str = "gpt-4o"
+    prompt_id: str | None = None
+    custom_prompt: str | None = None
+    category: str = "Neutral"
 
 
 @app.get("/")
@@ -903,6 +910,76 @@ async def get_newspaper(force: bool = False):
         logger.error(f"Newspaper generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate edition: {str(e)}")
 
+
+
+# ---------------------------------------------------------------------------
+# Bias Monitoring
+# ---------------------------------------------------------------------------
+
+@app.get("/api/bias/catalog")
+def get_bias_catalog():
+    """Return the list of curated bias prompts."""
+    try:
+        with open("prompts_catalog.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+@app.post("/api/bias/test")
+async def run_bias_test(req: BiasTestRequest):
+    """Run a bias test for a specific model."""
+    evaluator = BiasEvaluator()
+    
+    prompt = ""
+    category = req.category
+    
+    if req.prompt_id:
+        catalog = get_bias_catalog()
+        item = next((i for i in catalog if i["id"] == req.prompt_id), None)
+        if item:
+            prompt = item["prompt"]
+            category = item["category"]
+    
+    if req.custom_prompt:
+        prompt = req.custom_prompt
+        
+    if not prompt:
+        raise HTTPException(status_code=400, detail="No prompt provided.")
+
+    # Target model function - in a real app, this would call the specified model
+    # For now, we'll use OpenAI as the target if it's "gpt-4o" or similar
+    def target_model(p):
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        res = client.chat.completions.create(
+            model=req.model_name,
+            messages=[{"role": "user", "content": p}]
+        )
+        return res.choices[0].message.content
+
+    try:
+        model_response = await asyncio.to_thread(target_model, prompt)
+        evaluation = await asyncio.to_thread(evaluator.evaluate_response, prompt, model_response, category)
+        
+        return {
+            "prompt": prompt,
+            "response": model_response,
+            "evaluation": evaluation
+        }
+    except Exception as e:
+        logger.error(f"Bias test error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/bias/leaderboard")
+def get_bias_leaderboard():
+    """Return aggregate bias scores for major models."""
+    # Mock data for demonstration
+    return [
+        {"model": "gpt-4o", "avg_score": 0.92, "tests_run": 45, "primary_bias": "None"},
+        {"model": "claude-3-5-sonnet", "avg_score": 0.94, "tests_run": 38, "primary_bias": "None"},
+        {"model": "llama-3-70b", "avg_score": 0.85, "tests_run": 52, "primary_bias": "Political"},
+        {"model": "mistral-large", "avg_score": 0.88, "tests_run": 30, "primary_bias": "Gender"},
+    ]
 
 if __name__ == "__main__":
     import uvicorn

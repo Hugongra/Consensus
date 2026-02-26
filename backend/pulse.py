@@ -21,22 +21,25 @@ load_dotenv()
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY"),
+    default_headers={
+        "HTTP-Referer": os.getenv("OPENROUTER_REFERER", "https://factnews.app"),
+        "X-Title": os.getenv("OPENROUTER_APP_TITLE", "FactNews"),
+    }
 )
 
 ANALYSTS = [
     {"id": "openai/gpt-4o-mini",          "display_name": "GPT-4o Mini"},
-    {"id": "anthropic/claude-haiku-4.5",   "display_name": "Claude Haiku 4.5"},
-    {"id": "google/gemini-2.5-flash",      "display_name": "Gemini 2.5 Flash"},
-    {"id": "x-ai/grok-4.1-fast",          "display_name": "Grok 4.1 Fast"},
-    {"id": "mistralai/mistral-large-2512", "display_name": "Mistral Large 3"},
+    {"id": "anthropic/claude-3-haiku",      "display_name": "Claude 3 Haiku"},
     {"id": "google/gemini-2.0-flash-001",  "display_name": "Gemini 2.0 Flash"},
+    {"id": "x-ai/grok-4.1-fast",          "display_name": "Grok 4.1 Fast"},
+    {"id": "mistralai/mistral-large-2411", "display_name": "Mistral Large 2411"},
+    {"id": "meta-llama/llama-3.3-70b-instruct", "display_name": "Llama 3.3 70B"},
 ]
 
 JUDGE_POOL = [
     "openai/gpt-4o-mini",
-    "anthropic/claude-haiku-4.5",
-    "google/gemini-2.5-flash",
-    "x-ai/grok-4.1-fast",
+    "anthropic/claude-3-haiku",
+    "google/gemini-2.0-flash-001",
 ]
 
 ANALYST_PROMPT = """You are a concise news analyst. Analyze the following topic/claim and give your honest, factual assessment in 3-5 sentences.
